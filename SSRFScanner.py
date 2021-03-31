@@ -148,6 +148,8 @@ class BurpExtender(IBurpExtender, IScannerCheck,IBurpCollaboratorClientContext):
         vulnflag = False
         othervulnflag = False
         otherdomain = ""
+        issueresult = []
+        domainresult = []
         for coll in collresult:
             self.stdout.println(coll.getProperties())
             type = coll.getProperty('type')
@@ -175,32 +177,36 @@ class BurpExtender(IBurpExtender, IScannerCheck,IBurpCollaboratorClientContext):
                 if not vulnflag and domains == randomssrfpayload:
                     #self.stdout.println("[SSRF---------------EXACTLY----------------]:"+domains)
                     vulnflag = True
+                    issueresult.append(CustomScanIssue(
+                    baseRequestResponse.getHttpService(),
+                    self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
+                    [self._callbacks.applyMarkers(baseRequestResponse, None, None)],
+                    "SSRF",
+                    "The response contains the string: " + randomssrfpayload,
+                    "High","Certain"))
                 elif domains != "" and domains != randomssrfpayload:
                     self.stdout.println("[SSRF---------------YOU-SHOULD-CHECK-IT-YOURSELF----------------]:"+domains)
                     #self.stdout.println(domains != self.ssrfpayload)
                     othervulnflag = True
                     otherdomain = domains
+                    if domains not in domainresult:
+                        domainresult.append(domains)
+                        issueresult.append(CustomScanIssue(
+                        baseRequestResponse.getHttpService(),
+                        self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
+                        [self._callbacks.applyMarkers(baseRequestResponse, None, None)],
+                        "SSRFOther",
+                        "Found %s please check history for vuln" % otherdomain,
+                        "High","Tentative"))
 
             
             #self._helpers.base64Encode
 
         # report the issue
-        if vulnflag:
-            return [CustomScanIssue(
-                baseRequestResponse.getHttpService(),
-                self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
-                [self._callbacks.applyMarkers(baseRequestResponse, None, None)],
-                "SSRF",
-                "The response contains the string: " + randomssrfpayload,
-                "High","Certain")]
-        if othervulnflag:
-            return [CustomScanIssue(
-                baseRequestResponse.getHttpService(),
-                self._helpers.analyzeRequest(baseRequestResponse).getUrl(),
-                [self._callbacks.applyMarkers(baseRequestResponse, None, None)],
-                "SSRFOther",
-                "Found %s please check history for vuln" % otherdomain,
-                "High","Tentative")]
+
+        if vulnflag or othervulnflag:
+            return issueresult
+
 
     def doActiveScan(self, baseRequestResponse, insertionPoint):
         # make a request containing our injection test in the insertion point
